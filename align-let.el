@@ -275,17 +275,25 @@ The return is t for a let, symbol setq for a setq, or nil if neither."
                    ;; specials `and-let*' etc with bindings at arg number
                    ;; `count' from `align-let' property, and not necessarily
                    ;; a "((" nesting there
-                   (let ((count (if (eq prop t) 1 prop)))
-                     (condition-case nil
-                         (progn
-                           (forward-sexp count)
-                           (down-list 1))
-                       (error
-                        (error "Less than %s argument(s) to `%s'"
-                               count name))))
+                   (let ((count (if (eq prop t) 1 prop))
+                         (prop (condition-case nil
+                                   (progn
+                                     (forward-sexp count)
+                                     (if (save-excursion
+                                           (forward-sexp)
+                                           (backward-sexp)
+                                           (looking-at "\\["))
+                                         (progn
+                                           (down-list 1)
+                                           'setq) ;; a Clojure (let [a (x), b (y)])
+                                       (down-list 1)
+                                       prop)) ;; return whatever prop was before (probably t)
+                                 (error
+                                  (error "Less than %s argument(s) to `%s'"
+                                         count name)))))
 
-                   (set-marker align-let-save-point-marker (point))
-                   prop) ;; return true
+                     (set-marker align-let-save-point-marker (point))
+                     prop)) ;; return true
 
                   (t
                    ;; look for a "((..." argument
@@ -306,6 +314,7 @@ The return is t for a let, symbol setq for a setq, or nil if neither."
 (put 'setq         'align-let 'setq)
 (put 'setq-default 'align-let 'setq)
 (put 'psetq        'align-let 'setq) ;; from cl.el
+(put 'let          'align-let t) ;; so we can detect Clojure's let, which lacks (var val) parens
 
 (defun align-let-find-let ()
   "Find a `let' or `setq' surrounding point.
